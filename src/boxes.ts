@@ -15,8 +15,11 @@ type ODControlAction =
     {
         type: 'Init',
     } | {
-        type: 'SelectBox',
-        box: Box | undefined,
+        type: 'MouseClick',
+    } | {
+        type: 'MouseMove'
+        x: number,
+        y: number,
     }
 
 interface ODControl {
@@ -111,34 +114,50 @@ function ControlReducer(
 
     switch (action.type) {
 
-        case 'SelectBox': {
-            if (action.box === control.selectedBox)
-                return;
+        case 'MouseClick': {
+            if (control.selectedBox) {
+                control.selectionLocked = true;
+            }
+            break;
+        }
 
-            for (const box of control.boxes) {
-                const boxIds = getBoxIds(control, box);
-                const boxElements = getBoxElements(boxIds);
-
-                // unselect the current selection, if any
-
-                // select the new selection, if any
-                if (box === action.box) {
-                    boxElements.topLeftDrag?.style.setProperty('visibility', 'visible');
-                    boxElements.bottomRightDrag?.style.setProperty('visibility', 'visible');
-                    boxElements.outline?.style.setProperty('border-color', 'rgba(255, 0, 0, 1)');
-                } else {
-                    if (box === control.selectedBox) {
-                        boxElements.topLeftDrag?.style.setProperty('visibility', 'hidden');
-                        boxElements.bottomRightDrag?.style.setProperty('visibility', 'hidden');
-                    }
-
-                    // dim or undim all the non-selected boxes
-                    boxElements.outline?.style.setProperty('border-color', `rgba(255, 0, 0, ${action.box ? '.1' : '1'}`);
-                }
-
+        case 'MouseMove': {
+            if (control.selectionLocked) {
+                const boxBounds = getBoxBounds(control, control.selectedBox!);
+                if (!inBoxBounds(boxBounds, action.x, action.y))
+                    control.selectionLocked = false;
             }
 
-            control.selectedBox = action.box;
+            if (!control.selectionLocked) {
+                const bestBox = getBestBox(control, action.x, action.y);
+                if (bestBox === control.selectedBox)
+                    return;
+
+                for (const box of control.boxes) {
+                    const boxIds = getBoxIds(control, box);
+                    const boxElements = getBoxElements(boxIds);
+
+                    // select the new selection, if any
+                    if (box === bestBox) {
+                        boxElements.topLeftDrag?.style.setProperty('visibility', 'visible');
+                        boxElements.bottomRightDrag?.style.setProperty('visibility', 'visible');
+                        boxElements.outline?.style.setProperty('border-color', 'rgba(255, 0, 0, 1)');
+                    } else {
+                        // unselect the current selection, if any
+
+                        if (box === control.selectedBox) {
+                            boxElements.topLeftDrag?.style.setProperty('visibility', 'hidden');
+                            boxElements.bottomRightDrag?.style.setProperty('visibility', 'hidden');
+                        }
+
+                        // dim or undim all the non-selected boxes
+                        boxElements.outline?.style.setProperty('border-color', `rgba(255, 0, 0, ${bestBox ? '.1' : '1'}`);
+                    }
+                }
+
+                control.selectedBox = bestBox;
+                control.selectionLocked = false;
+            }
 
             break;
         }
@@ -154,28 +173,16 @@ function ControlReducer(
                 width: ${control.width}px;
             `);
             mouseInput.onmousemove = (ev) => {
-                // console.log((ev.target as HTMLElement).id, ev.offsetX, ev.offsetY);
-
-                if (control.selectionLocked) {
-                    const boxBounds = getBoxBounds(control, control.selectedBox!);
-                    if (!inBoxBounds(boxBounds, ev.offsetX, ev.offsetY))
-                        control.selectionLocked = false;
-                }
-
-                if (!control.selectionLocked) {
-                    const box = bestBox(control, ev.offsetX, ev.offsetY);
-                    if (box === control.selectedBox)
-                        return;
-                    ControlReducer(control, {
-                        type: 'SelectBox',
-                        box,
-                    })
-                }
+                ControlReducer(control, {
+                    type: 'MouseMove',
+                    x: ev.offsetX,
+                    y: ev.offsetY,
+                });
             }
             mouseInput.onmousedown = (ev) => {
-                if (control.selectedBox) {
-                    control.selectionLocked = true;
-                }
+                ControlReducer(control, {
+                    type: 'MouseClick',
+                });
             }
     
             const divs = control.boxes.map(box => {
@@ -261,7 +268,7 @@ function getBoxBounds(
     }
 }
 
-function bestBox(
+function getBestBox(
     control: ODControl,
     x: number,
     y: number,
