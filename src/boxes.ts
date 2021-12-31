@@ -136,15 +136,16 @@ function ControlReducer(
                     const boxIds = getBoxIds(control, box);
                     const boxElements = getBoxElements(boxIds);
 
-                    // select the new selection, if any
                     if (box === bestBox) {
+                        // select the new selection
                         boxElements.topLeftDrag?.style.setProperty('visibility', 'visible');
                         boxElements.bottomRightDrag?.style.setProperty('visibility', 'visible');
                         boxElements.outline?.style.setProperty('border-color', 'rgba(255, 0, 0, 1)');
+                        control.div.style.setProperty('cursor', 'move');
                     } else {
-                        // unselect the current selection, if any
 
                         if (box === control.selectedBox) {
+                            // unselect the current selection
                             boxElements.topLeftDrag?.style.setProperty('visibility', 'hidden');
                             boxElements.bottomRightDrag?.style.setProperty('visibility', 'hidden');
                         }
@@ -156,6 +157,10 @@ function ControlReducer(
 
                 control.selectedBox = bestBox;
                 control.selectionLocked = false;
+
+                if (!control.selectedBox) {
+                    control.div.style.setProperty('cursor', 'crosshair');
+                }
             }
 
             break;
@@ -243,6 +248,7 @@ function ControlReducer(
             });
         
             control.div.replaceChildren(...divs, mouseInput);
+            control.div.style.setProperty('cursor', 'crosshair');
             break;
         }
     }
