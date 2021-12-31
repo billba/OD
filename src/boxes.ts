@@ -1,14 +1,14 @@
-console.log("loaded");
+interface BoxBounds {
+    top: number,
+    left: number,
+    height: number,
+    width: number,
+}
 
 interface Box {
     tagId: string,
     tagName: string,
-    boundingBox: {
-        top: number,
-        left: number,
-        height: number,
-        width: number,
-    }
+    boundingBox: BoxBounds,
 }
 
 type ODControlAction =
@@ -49,7 +49,6 @@ function insertBoxes(
     boxes: Box[],
     id: string,
 ) {
-    console.log("working");
     let control = __ODState.controls[id];
     if (control == undefined) {
         const div = document.getElementById(id) as HTMLDivElement;
@@ -247,13 +246,6 @@ function ControlReducer(
             break;
         }
     }
-}
-
-interface BoxBounds {
-    top: number,
-    left: number,
-    height: number,
-    width: number,
 }
 
 function getBoxBounds(
