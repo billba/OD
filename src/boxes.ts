@@ -25,6 +25,7 @@ interface ODControl {
     width: number,
     boxes: Box[],
     selectedBox?: Box,
+    selectionLocked: boolean,
     lastAction?: ODControlAction,
 }
 
@@ -58,6 +59,7 @@ function insertBoxes(
             height: div.clientHeight,
             width: div.clientWidth,
             boxes,
+            selectionLocked: false,
         }
 
         ControlReducer(control, {
@@ -142,24 +144,38 @@ function ControlReducer(
         }
 
         case 'Init': {
-            const mousemove = document.createElement('div');
-            mousemove.setAttribute('id', `${control.div.id}-mousemove`);
-            mousemove.setAttribute('style', `
+            const mouseInput = document.createElement('div');
+            mouseInput.setAttribute('id', `${control.div.id}-mousemove`);
+            mouseInput.setAttribute('style', `
                 position: absolute;
                 top: 0px;
                 left: 0px;
                 height: ${control.height}px;
                 width: ${control.width}px;
             `);
-            mousemove.onmousemove = (ev) => {
-                console.log((ev.target as HTMLElement).id, ev.offsetX, ev.offsetY);
-                const box = bestBox(control, ev.offsetX, ev.offsetY);
-                if (box === control.selectedBox)
-                    return;
-                ControlReducer(control, {
-                    type: 'SelectBox',
-                    box,
-                })
+            mouseInput.onmousemove = (ev) => {
+                // console.log((ev.target as HTMLElement).id, ev.offsetX, ev.offsetY);
+
+                if (control.selectionLocked) {
+                    const boxBounds = getBoxBounds(control, control.selectedBox!);
+                    if (!inBoxBounds(boxBounds, ev.offsetX, ev.offsetY))
+                        control.selectionLocked = false;
+                }
+
+                if (!control.selectionLocked) {
+                    const box = bestBox(control, ev.offsetX, ev.offsetY);
+                    if (box === control.selectedBox)
+                        return;
+                    ControlReducer(control, {
+                        type: 'SelectBox',
+                        box,
+                    })
+                }
+            }
+            mouseInput.onmousedown = (ev) => {
+                if (control.selectedBox) {
+                    control.selectionLocked = true;
+                }
             }
     
             const divs = control.boxes.map(box => {
@@ -220,27 +236,60 @@ function ControlReducer(
                 return container;
             });
         
-            control.div.replaceChildren(...divs, mousemove);
+            control.div.replaceChildren(...divs, mouseInput);
             break;
         }
     }
 }
 
+interface BoxBounds {
+    top: number,
+    left: number,
+    height: number,
+    width: number,
+}
+
+function getBoxBounds(
+    control: ODControl,
+    box: Box
+): BoxBounds {
+    return {
+        top: control.height * box.boundingBox.top - padding,
+        left: control.width * box.boundingBox.left - padding,
+        height: control.height * box.boundingBox.height + padding * 2,
+        width: control.width * box.boundingBox.width + padding * 2,
+    }
+}
 
 function bestBox(
     control: ODControl,
     x: number,
     y: number,
 ): Box | undefined {
-    for (const box of control.boxes) {
-        const top =  control.height * box.boundingBox.top - dragCircleRadius;
-        const left = control.width * box.boundingBox.left - dragCircleRadius;
-        const height = control.height * box.boundingBox.height + dragCircleRadius;
-        const width = control.width * box.boundingBox.width + dragCircleRadius;
+    let bestDistance = Number.MAX_VALUE;
+    let bestBox:Box | undefined = undefined;
 
-        if (x >= left && x < left + width && y >= top && y < top + height)
-            return box;
+    for (const box of control.boxes) {
+        const boxBounds = getBoxBounds(control, box);
+
+        if (inBoxBounds(boxBounds, x, y)) {
+            let dx = Math.abs(boxBounds.left + boxBounds.width/2 - x);
+            let dy = Math.abs(boxBounds.top + boxBounds.height/2 - y);
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestBox = box;
+            }
+        }    
     }
 
-    return;
+    return bestBox;
+}
+
+function inBoxBounds(
+    boxBounds: BoxBounds,
+    x: number,
+    y: number
+) {
+    return x >= boxBounds.left && x < boxBounds.left + boxBounds.width && y >= boxBounds.top && y < boxBounds.top + boxBounds.height;
 }
