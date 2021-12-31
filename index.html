@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+
+    <div style='position: relative; height: 250px; width: 250px; background: lightgrey' id="1">
+    </div>
+
+    <div style='position: relative; height: 250px; width: 250px; background: lightgreen' id="2">
+    </div>
+
+    <script src="./scripts/boxes.js"></script>
+
+    <script>
+        insertBoxes([
+            {tagId: "d1", tagName: "duck", boundingBox: {top: .32, left: .15, height: .5, width: .4}},
+            {tagId: "c1", tagName: "cat", boundingBox: {top: .45, left: .5, height: .2, width: .1}}
+        ], "1");
+        insertBoxes([
+            {tagId: "d2", tagName: "dog", boundingBox: {top: .12, left: .55, height: .3, width: .2}},
+            {tagId: "b1", tagName: "bird", boundingBox: {top: .8, left: .8, height: .1, width: .1}}
+        ], "2");
+    </script>
+
+</body>
+</html>
