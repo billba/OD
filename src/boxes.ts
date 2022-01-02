@@ -20,8 +20,6 @@ type ODControlAction =
     {
         type: 'Init',
     } | {
-        type: 'MouseClick',
-    } | {
         type: 'MouseMove',
         x: number,
         y: number,
@@ -31,6 +29,8 @@ type ODControlAction =
         y: number,
     } | {
         type: 'MouseUp',
+        x: number,
+        y: number,
     }
 
 interface ODControl {
@@ -179,21 +179,23 @@ function ControlReducer(
 ) {
     switch (action.type) {
 
-        case 'MouseClick': {
-            if (control.selectedBox) {
-                control.selectionLocked = true;
-            }
-            break;
-        }
-
         case 'MouseDown': {
             control.drag = true;
             control.dragX = action.x;
             control.dragY = action.y;
+            if (control.selectedBox)
+                control.selectionLocked = true;
             break;
         }
 
         case 'MouseUp': {
+            if (action.x != control.dragX || action.y != control.dragY) {
+                if (control.selectedBox) {
+                    // complete drag here
+                } else {
+                // finish adding a box
+                }
+            }
             control.drag = false;
             control.dragX = control.dragY = 0;
             break;
@@ -343,11 +345,6 @@ function ControlReducer(
                     y: ev.offsetY,
                 });
             }
-            mouseInput.onclick = (ev) => {
-                ControlReducer(control, {
-                    type: 'MouseClick',
-                });
-            }
             mouseInput.onmousedown = (ev) => {
                 ControlReducer(control, {
                     type: 'MouseDown',
@@ -358,6 +355,8 @@ function ControlReducer(
             mouseInput.onmouseup = (ev) => {
                 ControlReducer(control, {
                     type: 'MouseUp',
+                    x: ev.offsetX,
+                    y: ev.offsetY,
                 })
             }
 
