@@ -32,7 +32,6 @@ interface ODControl {
     boxes: Box[],
     selectedBox?: Box,
     selectionLocked: boolean,
-    lastAction?: ODControlAction,
     boxArea?: BoxArea,
     drag: boolean,
     dragX: number,
@@ -165,8 +164,6 @@ function ControlReducer(
     control: ODControl,
     action: ODControlAction,
 ) {
-    control.lastAction = action;
-
     switch (action.type) {
 
         case 'MouseClick': {
@@ -316,14 +313,14 @@ function ControlReducer(
 
         case 'Init': {
             const mouseInput = document.createElement('div');
-            mouseInput.setAttribute('id', `${control.div.id}-mousemove`);
-            mouseInput.setAttribute('style', `
-                position: absolute;
-                top: 0px;
-                left: 0px;
-                height: ${control.height}px;
-                width: ${control.width}px;
-            `);
+            mouseInput.id = `${control.div.id}-mousemove`;
+            mouseInput.applyStyles({
+                position: `absolute`,
+                top: `0px`,
+                left: `0px`,
+                height: `${control.height}px`,
+                width: `${control.width}px`,
+            });
             mouseInput.onmousemove = (ev) => {
                 ControlReducer(control, {
                     type: 'MouseMove',
@@ -343,7 +340,6 @@ function ControlReducer(
                     y: ev.offsetY,
                 })
             }
-
             mouseInput.onmouseup = (ev) => {
                 ControlReducer(control, {
                     type: 'MouseUp',
