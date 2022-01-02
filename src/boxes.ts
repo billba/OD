@@ -1,9 +1,6 @@
-interface BoxBounds {
-    top: number,
-    left: number,
-    height: number,
-    width: number,
-}
+type BoxDimensions = 'top' | 'left' | 'height' | 'width';
+
+type BoxBounds = Record<BoxDimensions, number>;
 
 interface Box {
     tagId: string,
@@ -95,6 +92,8 @@ type BoxIds = BoxRecord<string>;
 
 type BoxElements = BoxRecord<HTMLDivElement>;
 
+type BoxSizes = BoxRecord<BoxBounds>;
+
 function getBoxIds(
     control: ODControl,
     box: Box
@@ -113,6 +112,52 @@ function getBoxElements(boxIds: BoxIds): BoxElements {
         outline: document.getElementById(boxIds.outline) as HTMLDivElement,
         topLeftDrag: document.getElementById(boxIds.topLeftDrag) as HTMLDivElement,
         bottomRightDrag: document.getElementById(boxIds.bottomRightDrag) as HTMLDivElement,
+    }
+}
+
+function getBoxSizes(
+    control: ODControl,
+    box: Box,
+): BoxSizes {
+    const top = control.height * box.boundingBox.top;
+    const left = control.width * box.boundingBox.left;
+    const height = control.height * box.boundingBox.height;
+    const width = control.width * box.boundingBox.width;
+
+    return {
+        container: {
+            top: top - dragCircleRadius + borderWidth / 2,
+            left: left - dragCircleRadius + borderWidth / 2,
+            height: height + dragCircleRadius * 2 - borderWidth,
+            width: width + dragCircleRadius * 2 - borderWidth,
+        },
+        outline: {
+            top: dragCircleRadius - borderWidth / 2,
+            left: dragCircleRadius - borderWidth / 2,
+            height: height - borderWidth * 2,
+            width: width - borderWidth * 2,
+        },
+        topLeftDrag: {
+            top: 0,
+            left: 0,
+            height: (dragCircleRadius - borderWidth) * 2,
+            width: (dragCircleRadius - borderWidth) * 2,
+        },
+        bottomRightDrag: {
+            top: height - borderWidth,
+            left: width - borderWidth,
+            height: (dragCircleRadius - borderWidth) * 2,
+            width: (dragCircleRadius - borderWidth) * 2,
+        },
+    }
+}
+
+function numbersToPxStrings(boxBounds: BoxBounds) {
+    return {
+        top: `${boxBounds.top}px`,
+        left: `${boxBounds.left}px`,
+        height: `${boxBounds.height}px`,
+        width: `${boxBounds.width}px`,
     }
 }
 
@@ -154,58 +199,54 @@ function ControlReducer(
                 // console.log(control.boxArea, x, y, dx, dy);
 
                 const boxIds = getBoxIds(control, control.selectedBox!);
-                const {container, outline, topLeftDrag, bottomRightDrag} = getBoxElements(boxIds);
+                const {container, outline, bottomRightDrag} = getBoxElements(boxIds);
 
-                const top = control.height * box.boundingBox.top;
-                const left = control.width * box.boundingBox.left;
-                const height = control.height * box.boundingBox.height;
-                const width = control.width * box.boundingBox.width;
-
+                const boxSizes = getBoxSizes(control, box);
 
                 switch(control.boxArea) {
 
                     case 'container': { 
                         container.applyStyles({
-                            top: `${top + dy - dragCircleRadius + borderWidth / 2}px`,
-                            left: `${left + dx - dragCircleRadius + borderWidth / 2}px`,
+                            top: `${boxSizes.container.top + dy}px`,
+                            left: `${boxSizes.container.left + dx}px`,
                         });       
                         break;
                     }
 
                     case 'topLeftDrag': {
                         container.applyStyles({
-                            top: `${top + dy - dragCircleRadius + borderWidth / 2}px`,
-                            left: `${left + dx - dragCircleRadius + borderWidth / 2}px`,
-                            height: `${height - dy + dragCircleRadius * 2 - borderWidth}px`,
-                            width: `${width - dx + dragCircleRadius * 2 - borderWidth}px`,
+                            top: `${boxSizes.container.top + dy}px`,
+                            left: `${boxSizes.container.left + dx}px`,
+                            height: `${boxSizes.container.height - dy}px`,
+                            width: `${boxSizes.container.width - dx}px`,
                         });
 
                         outline.applyStyles({
-                            height: `${height - dy - borderWidth * 2}px`,
-                            width: `${width - dx - borderWidth * 2}px`,
+                            height: `${boxSizes.outline.height - dy}px`,
+                            width: `${boxSizes.outline.width - dx}px`,
                         });
 
                         bottomRightDrag.applyStyles({
-                            top: `${height - dy - borderWidth}px`,
-                            left: `${width - dx - borderWidth}px`,
+                            top: `${boxSizes.bottomRightDrag.top - dy}px`,
+                            left: `${boxSizes.bottomRightDrag.left - dx}px`,
                         });
                         break;
                     }
 
                     case 'bottomRightDrag': {
                         container.applyStyles({
-                            height: `${height + dy + dragCircleRadius * 2 - borderWidth}px`,
-                            width: `${width + dx + dragCircleRadius * 2 - borderWidth}px`,
+                            height: `${boxSizes.container.height + dy}px`,
+                            width: `${boxSizes.container.width + dx}px`,
                         });
 
                         outline.applyStyles({
-                            height: `${height + dy - borderWidth * 2}px`,
-                            width: `${width + dx - borderWidth * 2}px`,
+                            height: `${boxSizes.outline.height + dy}px`,
+                            width: `${boxSizes.outline.width + dx}px`,
                         });
 
                         bottomRightDrag.applyStyles({
-                            top: `${height + dy - borderWidth}px`,
-                            left: `${width + dx - borderWidth}px`,
+                            top: `${boxSizes.bottomRightDrag.top + dy}px`,
+                            left: `${boxSizes.bottomRightDrag.left + dx}px`,
                         });
                         break;
                     }
@@ -311,19 +352,13 @@ function ControlReducer(
 
             const divs = control.boxes.map(box => {
                 const boxIds = getBoxIds(control, box);
-                const top = control.height * box.boundingBox.top;
-                const left = control.width * box.boundingBox.left;
-                const height = control.height * box.boundingBox.height;
-                const width = control.width * box.boundingBox.width;
+                const boxSizes = getBoxSizes(control, box);
 
                 let container = document.createElement('div');
                 container.id = boxIds.container;
                 container.applyStyles({
                     position: 'absolute',
-                    top: `${top - dragCircleRadius + borderWidth / 2}px`,
-                    left: `${left - dragCircleRadius + borderWidth / 2}px`,
-                    height: `${height + dragCircleRadius * 2 - borderWidth}px`,
-                    width: `${width + dragCircleRadius * 2 - borderWidth}px`,
+                    ... numbersToPxStrings(boxSizes.container),
                     // outline: 'blue dashed 1px';
                 });
 
@@ -331,10 +366,7 @@ function ControlReducer(
                 outline.id = boxIds.outline;
                 outline.applyStyles({
                     position: 'absolute',
-                    top: `${dragCircleRadius - borderWidth / 2}px`,
-                    left: `${dragCircleRadius - borderWidth / 2}px`,
-                    height: `${height - borderWidth * 2}px`,
-                    width: `${width - borderWidth * 2}px`,
+                    ... numbersToPxStrings(boxSizes.outline),
                     border: `red solid ${borderWidth}px`,
                     borderRadius: `${outlineRadius}px`,
                 });
@@ -343,10 +375,7 @@ function ControlReducer(
                 topLeftDrag.id = boxIds.topLeftDrag;
                 topLeftDrag.applyStyles({
                     position: 'absolute',
-                    top: `0px`,
-                    left: `0px`,
-                    height: `${(dragCircleRadius - borderWidth) * 2}px`,
-                    width: `${(dragCircleRadius - borderWidth) * 2}px`,
+                    ... numbersToPxStrings(boxSizes.topLeftDrag),
                     border: `red solid ${borderWidth}px`,
                     borderRadius: `100%`,
                     background: 'white',
@@ -357,10 +386,7 @@ function ControlReducer(
                 bottomRightDrag.id = boxIds.bottomRightDrag;
                 bottomRightDrag.applyStyles({
                     position: 'absolute',
-                    top: `${height - borderWidth}px`,
-                    left: `${width - borderWidth}px`,
-                    height: `${(dragCircleRadius - borderWidth) * 2}px`,
-                    width: `${(dragCircleRadius - borderWidth) * 2}px`,
+                    ... numbersToPxStrings(boxSizes.bottomRightDrag),
                     border: `red solid ${borderWidth}px`,
                     borderRadius: '100%',
                     background: 'white',
