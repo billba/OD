@@ -38,6 +38,7 @@ interface ODControl {
     height: number,
     width: number,
     boxes: Box[],
+    names: string[],
     selectedBox?: Box,
     selectionLocked: boolean,
     selectedBoxZone?: BoxZone,
@@ -61,8 +62,9 @@ const outlineRadius = 8;
 const borderWidth = 3;
 
 function insertBoxes(
-    boxes: Box[],
     id: string,
+    boxes: Box[],
+    names?: string[],
 ) {
     let control = __ODState.controls[id];
     if (control == undefined) {
@@ -76,6 +78,7 @@ function insertBoxes(
             height: div.clientHeight,
             width: div.clientWidth,
             boxes,
+            names: names ?? Array.from(new Set(boxes.map(box => box.tagName))),
             selectionLocked: false,
             drag: false,
             dragX: 0,
@@ -89,6 +92,28 @@ function insertBoxes(
         __ODState.controls[id] = control;
 
     }
+}
+
+type RGB = [red: number, green: number, blue: number];
+
+const colors: RGB[] = [
+    [255, 0, 0],
+    [0, 255, 0],
+    [0, 0, 255],
+    [255, 255, 0],
+    [255, 0, 255],
+    [0, 255, 255],
+]
+
+function boxColor(
+    control: ODControl,
+    box: Box
+): RGB {
+    return colors[control.names.indexOf(box.tagName) % colors.length];
+}
+
+function rgba(rgb: RGB, a: number) {
+    return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`
 }
 
 const nullString = '';
@@ -306,12 +331,13 @@ function ControlReducer(
                     for (const box of control.boxes) {
                         const boxIds = getBoxIds(control, box);
                         const boxElements = getBoxElements(boxIds);
+                        const rgb = boxColor(control, box);
 
                         if (box === bestBox) {
                             // select the new selection
                             boxElements.topLeftDrag.style.visibility = 'visible';
                             boxElements.bottomRightDrag.style.visibility = 'visible';
-                            boxElements.outline.style.borderColor = 'rgba(255, 0, 0, 1)';
+                            boxElements.outline.style.borderColor = rgba(rgb, 1);
                         } else {
                             if (box === control.selectedBox) {
                                 // unselect the current selection
@@ -320,7 +346,7 @@ function ControlReducer(
                             }
 
                             // dim or undim all the non-selected boxes
-                            boxElements.outline.style.borderColor =`rgba(255, 0, 0, ${bestBox ? '.1' : '1'}`;
+                            boxElements.outline.style.borderColor = rgba(rgb, bestBox ? .1 : 1);
                         }
                     }
                     control.selectedBox = bestBox;
@@ -385,6 +411,7 @@ function ControlReducer(
             const divs = control.boxes.map(box => {
                 const boxIds = getBoxIds(control, box);
                 const boundingBoxes = getBoundingBoxes(control, box);
+                const rgb = boxColor(control, box);
 
                 let container = document.createElement('div');
                 container.id = boxIds.container;
@@ -399,7 +426,7 @@ function ControlReducer(
                 outline.applyStyles({
                     position: 'absolute',
                     ... pxAll(boundingBoxes.outline),
-                    border: `red solid ${borderWidth}px`,
+                    border: `${rgba(rgb, 1)} solid ${borderWidth}px`,
                     borderRadius: `${outlineRadius}px`,
                 });
 
@@ -408,7 +435,7 @@ function ControlReducer(
                 topLeftDrag.applyStyles({
                     position: 'absolute',
                     ... pxAll(boundingBoxes.topLeftDrag),
-                    border: `red solid ${borderWidth}px`,
+                    border: `${rgba(rgb, 1)} solid ${borderWidth}px`,
                     borderRadius: `100%`,
                     background: 'white',
                     visibility: 'hidden',
@@ -419,7 +446,7 @@ function ControlReducer(
                 bottomRightDrag.applyStyles({
                     position: 'absolute',
                     ... pxAll(boundingBoxes.bottomRightDrag),
-                    border: `red solid ${borderWidth}px`,
+                    border: `${rgba(rgb, 1)} solid ${borderWidth}px`,
                     borderRadius: '100%',
                     background: 'white',
                     visibility: 'hidden',
