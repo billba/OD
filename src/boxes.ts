@@ -40,7 +40,7 @@ interface ODControl {
     boxes: Box[],
     selectedBox?: Box,
     selectionLocked: boolean,
-    dragZone?: BoxZone,
+    selectedBoxZone?: BoxZone,
     drag: boolean,
     dragX: number,
     dragY: number,
@@ -191,7 +191,32 @@ function ControlReducer(
         case 'MouseUp': {
             if (action.x != control.dragX || action.y != control.dragY) {
                 if (control.selectedBox) {
-                    // complete drag here
+                    const dx = (action.x - control.dragX)/control.width;
+                    const dy = (action.y - control.dragY)/control.height;
+                    switch (control.selectedBoxZone) {
+                        case 'padded': {
+                            control.selectedBox.boundingBox.top += dy;
+                            control.selectedBox.boundingBox.left += dx;
+                            break;
+                        }
+
+                        case 'topLeftDrag': {
+                            control.selectedBox.boundingBox.top += dy;
+                            control.selectedBox.boundingBox.left += dx;
+                            control.selectedBox.boundingBox.height -= dy;
+                            control.selectedBox.boundingBox.width -= dx;
+                            break;
+                        }
+
+                        case 'bottomRightDrag': {
+                            control.selectedBox.boundingBox.height += dy;
+                            control.selectedBox.boundingBox.width += dx;
+                            break;
+                        }
+
+                        default:
+                            break;
+                    }
                 } else {
                 // finish adding a box
                 }
@@ -203,17 +228,13 @@ function ControlReducer(
 
         case 'MouseMove': {
             if (control.drag) {
-                const box = control.selectedBox!;
-                // const x = action.x / control.width;
-                // const y = action.y / control.height;
                 const dx = action.x - control.dragX;
                 const dy = action.y - control.dragY;
-                // console.log(control.boxArea, x, y, dx, dy);
 
                 const {container: containerId, outline: outlineId, bottomRightDrag: bottomRightDragId} = getBoxElements(getBoxIds(control, control.selectedBox!));
-                const {container, outline, bottomRightDrag} = getBoundingBoxes(control, box);
+                const {container, outline, bottomRightDrag} = getBoundingBoxes(control, control.selectedBox!);
 
-                switch(control.dragZone) {
+                switch(control.selectedBoxZone) {
 
                     case 'padded': { 
                         containerId.applyStyles({
@@ -262,7 +283,7 @@ function ControlReducer(
                     }
 
                     default:
-                        console.error('unexpected control.boxZone:', control.dragZone);
+                        console.error('unexpected control.boxZone:', control.selectedBoxZone);
                         break;
                 }
     
@@ -271,42 +292,45 @@ function ControlReducer(
 
             if (control.selectionLocked) {
                 const {padded} = getBoundingBoxes(control, control.selectedBox!);
-                if (!whichBoxZone(padded, action.x, action.y))
+                control.selectedBoxZone = whichBoxZone(padded, action.x, action.y);
+                if (!control.selectedBoxZone)
                     control.selectionLocked = false;
             }
 
-            const [bestBox, bestBoxZone] = getBestBox(control, action.x, action.y);
+            if (!control.selectionLocked) {
+                const [bestBox, bestBoxZone] = getBestBox(control, action.x, action.y);
 
-            if (!control.selectionLocked && bestBox !== control.selectedBox) {
-                // change the selection (possibly to nothing)
+                if (bestBox !== control.selectedBox) {
+                    // change the selection (possibly to nothing)
 
-                for (const box of control.boxes) {
-                    const boxIds = getBoxIds(control, box);
-                    const boxElements = getBoxElements(boxIds);
+                    for (const box of control.boxes) {
+                        const boxIds = getBoxIds(control, box);
+                        const boxElements = getBoxElements(boxIds);
 
-                    if (box === bestBox) {
-                        // select the new selection
-                        boxElements.topLeftDrag.style.visibility = 'visible';
-                        boxElements.bottomRightDrag.style.visibility = 'visible';
-                        boxElements.outline.style.borderColor = 'rgba(255, 0, 0, 1)';
-                    } else {
-                        if (box === control.selectedBox) {
-                            // unselect the current selection
-                            boxElements.topLeftDrag.style.visibility = 'hidden';
-                            boxElements.bottomRightDrag.style.visibility = 'hidden';
+                        if (box === bestBox) {
+                            // select the new selection
+                            boxElements.topLeftDrag.style.visibility = 'visible';
+                            boxElements.bottomRightDrag.style.visibility = 'visible';
+                            boxElements.outline.style.borderColor = 'rgba(255, 0, 0, 1)';
+                        } else {
+                            if (box === control.selectedBox) {
+                                // unselect the current selection
+                                boxElements.topLeftDrag.style.visibility = 'hidden';
+                                boxElements.bottomRightDrag.style.visibility = 'hidden';
+                            }
+
+                            // dim or undim all the non-selected boxes
+                            boxElements.outline.style.borderColor =`rgba(255, 0, 0, ${bestBox ? '.1' : '1'}`;
                         }
-
-                        // dim or undim all the non-selected boxes
-                        boxElements.outline.style.borderColor =`rgba(255, 0, 0, ${bestBox ? '.1' : '1'}`;
                     }
+                    control.selectedBox = bestBox;
                 }
 
-                control.selectedBox = bestBox;
-                control.selectionLocked = false;
+                control.selectedBoxZone = bestBoxZone;
             }
 
             if (control.selectedBox) {
-                switch (bestBoxZone) {
+                switch (control.selectedBoxZone) {
                     case 'topLeftDrag':
                     case 'bottomRightDrag':
                         control.div.style.cursor = 'nwse-resize';
@@ -315,14 +339,12 @@ function ControlReducer(
                         control.div.style.cursor = 'move';
                         break;
                     default:
-                        console.error('unexpected zone from getBestBox:', bestBoxZone);
+                        console.error('unexpected box zone when setting cursor:', control.selectedBoxZone);
                         break;
                 }
-
-                control.dragZone = bestBoxZone;
             } else {
-                control.div.style.setProperty('cursor', 'crosshair');
-                control.dragZone = undefined;
+                control.div.style.cursor = 'crosshair';
+                control.selectedBoxZone = undefined;
             }
 
             break;
@@ -464,7 +486,6 @@ interface HTMLElement {
 HTMLElement.prototype.applyStyles = function (styles)
 {
     for (const [key, value] of Object.entries(styles)) {
-        console.log(key, value);
         (this.style as any)[key] = value === undefined ? null : value;
     }
 }
