@@ -153,16 +153,63 @@ function ControlReducer(
                 const dy = action.y - control.dragY;
                 // console.log(control.boxArea, x, y, dx, dy);
 
+                const boxIds = getBoxIds(control, control.selectedBox!);
+                const {container, outline, topLeftDrag, bottomRightDrag} = getBoxElements(boxIds);
+
+                const top = control.height * box.boundingBox.top;
+                const left = control.width * box.boundingBox.left;
+                const height = control.height * box.boundingBox.height;
+                const width = control.width * box.boundingBox.width;
+
+
                 switch(control.boxArea) {
-                    case 'container': {
-                        const container = document.getElementById(getBoxIds(control, control.selectedBox!).container)!;
-                        const top = control.height * box.boundingBox.top;
-                        const left = control.width * box.boundingBox.left;
-        
-                        container.style.top = `${top + dy - dragCircleRadius + borderWidth / 2}px`;
-                        container.style.left = `${left + dx - dragCircleRadius + borderWidth / 2}px`;
+
+                    case 'container': { 
+                        container.applyStyles({
+                            top: `${top + dy - dragCircleRadius + borderWidth / 2}px`,
+                            left: `${left + dx - dragCircleRadius + borderWidth / 2}px`,
+                        });       
                         break;
                     }
+
+                    case 'topLeftDrag': {
+                        container.applyStyles({
+                            top: `${top + dy - dragCircleRadius + borderWidth / 2}px`,
+                            left: `${left + dx - dragCircleRadius + borderWidth / 2}px`,
+                            height: `${height - dy + dragCircleRadius * 2 - borderWidth}px`,
+                            width: `${width - dx + dragCircleRadius * 2 - borderWidth}px`,
+                        });
+
+                        outline.applyStyles({
+                            height: `${height - dy - borderWidth * 2}px`,
+                            width: `${width - dx - borderWidth * 2}px`,
+                        });
+
+                        bottomRightDrag.applyStyles({
+                            top: `${height - dy - borderWidth}px`,
+                            left: `${width - dx - borderWidth}px`,
+                        });
+                        break;
+                    }
+
+                    case 'bottomRightDrag': {
+                        container.applyStyles({
+                            height: `${height + dy + dragCircleRadius * 2 - borderWidth}px`,
+                            width: `${width + dx + dragCircleRadius * 2 - borderWidth}px`,
+                        });
+
+                        outline.applyStyles({
+                            height: `${height + dy - borderWidth * 2}px`,
+                            width: `${width + dx - borderWidth * 2}px`,
+                        });
+
+                        bottomRightDrag.applyStyles({
+                            top: `${height + dy - borderWidth}px`,
+                            left: `${width + dx - borderWidth}px`,
+                        });
+                        break;
+                    }
+
                     default:
                         break;
                 }
