@@ -8,13 +8,12 @@ interface Box {
     boundingBox: BoundingBox,
 }
 
-type BoxZone = 'padded' | 'container' | 'outline' | 'topLeftDrag' | 'bottomRightDrag';
+type Zone = 'move' | 'topLeftResize' | 'bottomRightResize' | 'topRightResize' | 'bottomLeftResize' | 'leftResize' | 'rightResize' | 'topResize' | 'bottomResize';
+type BoxElement = 'container' | 'outline' | 'topLeftResize' | 'bottomRightResize';
 
-type BoxIds = Record<BoxZone, string>;
+type BoxIds = Record<BoxElement, string>;
 
-type BoxElements = Record<BoxZone, HTMLDivElement>;
-
-type BoundingBoxes = Record<BoxZone, BoundingBox>;
+type BoxElements = Record<BoxElement, HTMLDivElement>;
 
 type ODControlAction =
     {
@@ -41,7 +40,7 @@ interface ODControl {
     names: string[],
     selectedBox?: Box,
     selectionLocked: boolean,
-    selectedBoxZone?: BoxZone,
+    selectedZone?: Zone,
     drag: boolean,
     dragX: number,
     dragY: number,
@@ -55,9 +54,8 @@ let __ODState: ODState = {
     controls: {},
 }
 
-const dragCircleRadius = 6;
-const boundsPadding = dragCircleRadius + 1;
-const dragTarget = boundsPadding * 2;
+const dragRadius = 6;
+const dragTarget = dragRadius * 2;
 const outlineRadius = 8;
 const borderWidth = 3;
 
@@ -70,7 +68,7 @@ function insertBoxes(
     if (control == undefined) {
         const div = document.getElementById(id) as HTMLDivElement;
         if (div == null) {
-            console.log("no such id");
+            console.error("no such id");
             return;
         }
         control = {
@@ -94,7 +92,7 @@ function insertBoxes(
     }
 }
 
-type RGB = [red: number, green: number, blue: number];
+type RGB = [number, number, number];
 
 const colors: RGB[] = [
     [255, 0, 0],
@@ -119,68 +117,130 @@ function rgba(rgb: RGB, a: number) {
 const nullString = '';
 const nullDivElement = {} as HTMLDivElement;
 
-function getBoxIds(
+function getBoxElementIds(
     control: ODControl,
     box: Box
 ): BoxIds {
     return {
-        padded: nullString,
         container: `od-${control.div.id}-box-${box.tagId}`,
         outline: `od-${control.div.id}-outline-${box.tagId}`,
-        topLeftDrag: `od-${control.div.id}-topleftdrag-${box.tagId}`,
-        bottomRightDrag: `od-${control.div.id}-bottomRightDrag-${box.tagId}`,
+        topLeftResize: `od-${control.div.id}-topLeftResize-${box.tagId}`,
+        bottomRightResize: `od-${control.div.id}-bottomRightResize-${box.tagId}`,
     }
 }
 
 function getBoxElements(boxIds: BoxIds): BoxElements {
     return {
-        padded: nullDivElement,
         container: document.getElementById(boxIds.container) as HTMLDivElement,
         outline: document.getElementById(boxIds.outline) as HTMLDivElement,
-        topLeftDrag: document.getElementById(boxIds.topLeftDrag) as HTMLDivElement,
-        bottomRightDrag: document.getElementById(boxIds.bottomRightDrag) as HTMLDivElement,
+        topLeftResize: document.getElementById(boxIds.topLeftResize) as HTMLDivElement,
+        bottomRightResize: document.getElementById(boxIds.bottomRightResize) as HTMLDivElement,
     }
 }
 
-function getBoundingBoxes(
+function getBoxDimensions(control: ODControl, boundingBox: BoundingBox) {
+    return {
+        top: control.height * boundingBox.top,
+        left: control.width * boundingBox.left,
+        height: control.height * boundingBox.height,
+        width: control.width * boundingBox.width,
+    }
+}
+
+function getElementBoundingBoxes(
     control: ODControl,
     box: Box,
-): BoundingBoxes {
-    const top = control.height * box.boundingBox.top;
-    const left = control.width * box.boundingBox.left;
-    const height = control.height * box.boundingBox.height;
-    const width = control.width * box.boundingBox.width;
+): Record<BoxElement, BoundingBox> {
+    const {top, left, height, width} = getBoxDimensions(control, box.boundingBox);
 
     return {
-        padded: {
-            top: top - boundsPadding,
-            left: left - boundsPadding,
-            height: height + boundsPadding * 2,
-            width: width + boundsPadding * 2,
-        },
         container: {
-            top: top - dragCircleRadius + borderWidth / 2,
-            left: left - dragCircleRadius + borderWidth / 2,
-            height: height + dragCircleRadius * 2 - borderWidth,
-            width: width + dragCircleRadius * 2 - borderWidth,
+            top: top - dragRadius + borderWidth / 2,
+            left: left - dragRadius + borderWidth / 2,
+            height: height + dragRadius * 2 - borderWidth,
+            width: width + dragRadius * 2 - borderWidth,
         },
         outline: {
-            top: dragCircleRadius - borderWidth / 2,
-            left: dragCircleRadius - borderWidth / 2,
+            top: dragRadius - borderWidth / 2,
+            left: dragRadius - borderWidth / 2,
             height: height - borderWidth * 2,
             width: width - borderWidth * 2,
         },
-        topLeftDrag: {
+        topLeftResize: {
             top: 0,
             left: 0,
-            height: (dragCircleRadius - borderWidth) * 2,
-            width: (dragCircleRadius - borderWidth) * 2,
+            height: (dragRadius - borderWidth) * 2,
+            width: (dragRadius - borderWidth) * 2,
         },
-        bottomRightDrag: {
+        bottomRightResize: {
             top: height - borderWidth,
             left: width - borderWidth,
-            height: (dragCircleRadius - borderWidth) * 2,
-            width: (dragCircleRadius - borderWidth) * 2,
+            height: (dragRadius - borderWidth) * 2,
+            width: (dragRadius - borderWidth) * 2,
+        },
+    }
+}
+    
+function getZoneBoundingBoxes(
+    control: ODControl,
+    box: Box,
+): Record<Zone, BoundingBox> {
+    const {top, left, height, width} = getBoxDimensions(control, box.boundingBox);
+
+    return {
+        move: {
+            top: top + dragRadius,
+            left: left + dragRadius,
+            height: height - dragTarget,
+            width: width - dragTarget,
+        },
+        topLeftResize: {
+            top: top - dragRadius,
+            left: left - dragRadius,
+            height: dragTarget,
+            width: dragTarget,
+        },
+        topResize: {
+            top: top - dragRadius,
+            left: left + dragRadius,
+            height: dragTarget,
+            width: width - dragTarget,
+        },
+        topRightResize: {
+            top: top - dragRadius,
+            left: left + width - dragTarget,
+            height: dragTarget,
+            width: dragTarget,
+        },
+        leftResize: {
+            top: top + dragRadius,
+            left: left - dragRadius,
+            height: height - dragTarget,
+            width: dragTarget,
+        },
+        rightResize: {
+            top: top + dragRadius,
+            left: left + width - dragRadius,
+            height: height - dragTarget,
+            width: dragTarget,
+        },
+        bottomLeftResize: {
+            top: top + height - dragRadius,
+            left: left - dragRadius,
+            height: dragTarget,
+            width: dragTarget,
+        },
+        bottomResize: {
+            top: top + height - dragRadius,
+            left: left + dragRadius,
+            height: dragTarget,
+            width: width - dragTarget,
+        },
+        bottomRightResize: {
+            top: top + height - dragRadius,
+            left: left + width - dragRadius,
+            height: dragTarget,
+            width: dragTarget,
         },
     }
 }
@@ -196,6 +256,130 @@ function pxAll(boxBounds: BoundingBox) {
         height: px(boxBounds.height),
         width: px(boxBounds.width),
     }
+}
+
+// every container is a superset of its outline, so in this object we only list container dimensions that don't
+// exist in the outline. The getZoneDimensions function merges them together
+const zoneDimensions: Record<Zone, Partial<Record<BoxElement, Partial<Record<BoxDimension, 1 | -1>>>>> = {
+    move: {
+        container: {
+            top: 1,
+            left: 1,
+        },
+    },
+    topLeftResize: {
+        container: {
+            top: 1,
+            left: 1,
+        },
+        outline: {
+            height: -1,
+            width: -1,
+        },
+        bottomRightResize: {
+            top: -1,
+            left: -1,
+        },
+    },
+    topResize: {
+        container: {
+            top: 1,
+        },
+        outline: {
+            height: -1,
+        },
+        bottomRightResize: {
+            top: -1,
+        }
+    },
+    topRightResize: {
+        container: {
+            top: 1,
+        },
+        outline: {
+            height: -1,
+            width: 1,
+        },
+        bottomRightResize: {
+            top: -1,
+            left: 1,
+        },
+    },
+    leftResize: {
+        container: {
+            left: 1,
+        },
+        outline: {
+            width: -1,
+        },
+        bottomRightResize: {
+            left: -1,
+        },
+    },
+    rightResize: {
+        outline: {
+            width: 1,
+        },
+        bottomRightResize: {
+            left: 1,
+        },
+    },
+    bottomLeftResize: {
+        container: {
+            left: 1,
+        },
+        outline: {
+            height: 1,
+            width: -1,
+        },
+        bottomRightResize: {
+            top: 1,
+            left: -1,
+        },
+    },
+    bottomResize: {
+        outline: {
+            height: 1,
+        },
+        bottomRightResize: {
+            top: 1,
+        }
+    },
+    bottomRightResize: {
+        container: {
+            height: 1,
+            width: 1,
+        },
+        outline: {
+            height: 1,
+            width: 1,
+        },
+        bottomRightResize: {
+            top: 1,
+            left: 1,
+        }
+    },
+}
+
+function getZoneDimensions(zone: Zone): Partial<Record<BoxElement, Partial<Record<BoxDimension, 1 | -1>>>> {
+    const elementDimensions = zoneDimensions[zone];
+    return {
+        outline: elementDimensions.outline??{},
+        container: {...elementDimensions.outline??{}, ...elementDimensions.container??{}},
+        bottomRightResize: elementDimensions.bottomRightResize??{},
+    }
+}
+
+const cursors = {
+    move: 'move',
+    topResize:'ns-resize',
+    bottomResize: 'ns-resize',
+    leftResize:'ew-resize',
+    rightResize: 'ew-resize',
+    topLeftResize:'nwse-resize',
+    bottomRightResize: 'nwse-resize',
+    topRightResize: 'nesw-resize',
+    bottomLeftResize: 'nesw-resize',
 }
 
 function ControlReducer(
@@ -218,29 +402,9 @@ function ControlReducer(
                 if (control.selectedBox) {
                     const dx = (action.x - control.dragX)/control.width;
                     const dy = (action.y - control.dragY)/control.height;
-                    switch (control.selectedBoxZone) {
-                        case 'padded': {
-                            control.selectedBox.boundingBox.top += dy;
-                            control.selectedBox.boundingBox.left += dx;
-                            break;
-                        }
 
-                        case 'topLeftDrag': {
-                            control.selectedBox.boundingBox.top += dy;
-                            control.selectedBox.boundingBox.left += dx;
-                            control.selectedBox.boundingBox.height -= dy;
-                            control.selectedBox.boundingBox.width -= dx;
-                            break;
-                        }
-
-                        case 'bottomRightDrag': {
-                            control.selectedBox.boundingBox.height += dy;
-                            control.selectedBox.boundingBox.width += dx;
-                            break;
-                        }
-
-                        default:
-                            break;
+                    for (const [dimension, delta] of Object.entries(getZoneDimensions(control.selectedZone!).container!)) {
+                        control.selectedBox.boundingBox[dimension as BoxDimension] += delta * (dimension == 'top' || dimension == 'height' ? dy : dx);
                     }
                 } else {
                 // finish adding a box
@@ -256,93 +420,48 @@ function ControlReducer(
                 const dx = action.x - control.dragX;
                 const dy = action.y - control.dragY;
 
-                const {container: containerId, outline: outlineId, bottomRightDrag: bottomRightDragId} = getBoxElements(getBoxIds(control, control.selectedBox!));
-                const {container, outline, bottomRightDrag} = getBoundingBoxes(control, control.selectedBox!);
+                const boxElements = getBoxElements(getBoxElementIds(control, control.selectedBox!));
+                const boundingBoxes = getElementBoundingBoxes(control, control.selectedBox!);
 
-                switch(control.selectedBoxZone) {
-
-                    case 'padded': { 
-                        containerId.applyStyles({
-                            top: px(container.top + dy),
-                            left: px(container.left + dx),
-                        });       
-                        break;
+                for (const [element, deltas] of Object.entries(getZoneDimensions(control.selectedZone!))) {
+                    const styles: Partial<Record<keyof CSSStyleDeclaration, string>> = {};
+                    for (const [dimension, delta] of Object.entries(deltas)) {
+                        styles[dimension as keyof CSSStyleDeclaration] = px(boundingBoxes[element as BoxElement][dimension as BoxDimension] + delta * (dimension == 'top' || dimension == 'height' ? dy : dx));
                     }
-
-                    case 'topLeftDrag': {
-                        containerId.applyStyles({
-                            top: px(container.top + dy),
-                            left: px(container.left + dx),
-                            height: px(container.height - dy),
-                            width: px(container.width - dx),
-                        });
-
-                        outlineId.applyStyles({
-                            height: px(outline.height - dy),
-                            width: px(outline.width - dx),
-                        });
-
-                        bottomRightDragId.applyStyles({
-                            top: px(bottomRightDrag.top - dy),
-                            left: px(bottomRightDrag.left - dx),
-                        });
-                        break;
-                    }
-
-                    case 'bottomRightDrag': {
-                        containerId.applyStyles({
-                            height: px(container.height + dy),
-                            width: px(container.width + dx),
-                        });
-
-                        outlineId.applyStyles({
-                            height: px(outline.height + dy),
-                            width: px(outline.width + dx),
-                        });
-
-                        bottomRightDragId.applyStyles({
-                            top: px(bottomRightDrag.top + dy),
-                            left: px(bottomRightDrag.left + dx),
-                        });
-                        break;
-                    }
-
-                    default:
-                        console.error('unexpected control.boxZone:', control.selectedBoxZone);
-                        break;
+        
+                    boxElements[element as BoxElement].applyStyles(styles);
                 }
-    
+
                 return;
             }
 
             if (control.selectionLocked) {
-                const {padded} = getBoundingBoxes(control, control.selectedBox!);
-                control.selectedBoxZone = whichBoxZone(padded, action.x, action.y);
-                if (!control.selectedBoxZone)
+                control.selectedZone = whichZone(getZoneBoundingBoxes(control, control.selectedBox!), action.x, action.y);
+                if (!control.selectedZone)
                     control.selectionLocked = false;
             }
 
             if (!control.selectionLocked) {
-                const [bestBox, bestBoxZone] = getBestBox(control, action.x, action.y);
+                const [bestBox, bestZone] = getBestBox(control, action.x, action.y);
 
                 if (bestBox !== control.selectedBox) {
                     // change the selection (possibly to nothing)
 
                     for (const box of control.boxes) {
-                        const boxIds = getBoxIds(control, box);
+                        const boxIds = getBoxElementIds(control, box);
                         const boxElements = getBoxElements(boxIds);
                         const rgb = boxColor(control, box);
 
                         if (box === bestBox) {
                             // select the new selection
-                            boxElements.topLeftDrag.style.visibility = 'visible';
-                            boxElements.bottomRightDrag.style.visibility = 'visible';
+                            boxElements.topLeftResize.style.visibility = 'visible';
+                            boxElements.bottomRightResize.style.visibility = 'visible';
                             boxElements.outline.style.borderColor = rgba(rgb, 1);
                         } else {
                             if (box === control.selectedBox) {
                                 // unselect the current selection
-                                boxElements.topLeftDrag.style.visibility = 'hidden';
-                                boxElements.bottomRightDrag.style.visibility = 'hidden';
+                                boxElements.topLeftResize.style.visibility = 'hidden';
+                                boxElements.bottomRightResize.style.visibility = 'hidden';
                             }
 
                             // dim or undim all the non-selected boxes
@@ -352,25 +471,14 @@ function ControlReducer(
                     control.selectedBox = bestBox;
                 }
 
-                control.selectedBoxZone = bestBoxZone;
+                control.selectedZone = bestZone;
             }
 
             if (control.selectedBox) {
-                switch (control.selectedBoxZone) {
-                    case 'topLeftDrag':
-                    case 'bottomRightDrag':
-                        control.div.style.cursor = 'nwse-resize';
-                        break;
-                    case 'padded':
-                        control.div.style.cursor = 'move';
-                        break;
-                    default:
-                        console.error('unexpected box zone when setting cursor:', control.selectedBoxZone);
-                        break;
-                }
+                control.div.style.cursor = cursors[control.selectedZone!]
             } else {
                 control.div.style.cursor = 'crosshair';
-                control.selectedBoxZone = undefined;
+                control.selectedZone = undefined;
             }
 
             break;
@@ -409,8 +517,8 @@ function ControlReducer(
             }
 
             const divs = control.boxes.map(box => {
-                const boxIds = getBoxIds(control, box);
-                const boundingBoxes = getBoundingBoxes(control, box);
+                const boxIds = getBoxElementIds(control, box);
+                const boundingBoxes = getElementBoundingBoxes(control, box);
                 const rgb = boxColor(control, box);
 
                 let container = document.createElement('div');
@@ -418,7 +526,7 @@ function ControlReducer(
                 container.applyStyles({
                     position: 'absolute',
                     ... pxAll(boundingBoxes.container),
-                    // outline: 'blue dashed 1px';
+                    // outline: 'blue dashed 1px',
                 });
 
                 let outline = document.createElement('div');
@@ -430,29 +538,29 @@ function ControlReducer(
                     borderRadius: `${outlineRadius}px`,
                 });
 
-                let topLeftDrag = document.createElement('div');
-                topLeftDrag.id = boxIds.topLeftDrag;
-                topLeftDrag.applyStyles({
+                let topLeftResize = document.createElement('div');
+                topLeftResize.id = boxIds.topLeftResize;
+                topLeftResize.applyStyles({
                     position: 'absolute',
-                    ... pxAll(boundingBoxes.topLeftDrag),
+                    ... pxAll(boundingBoxes.topLeftResize),
                     border: `${rgba(rgb, 1)} solid ${borderWidth}px`,
                     borderRadius: `100%`,
                     background: 'white',
                     visibility: 'hidden',
                 });
         
-                let bottomRightDrag = document.createElement('div');
-                bottomRightDrag.id = boxIds.bottomRightDrag;
-                bottomRightDrag.applyStyles({
+                let bottomRightResize = document.createElement('div');
+                bottomRightResize.id = boxIds.bottomRightResize;
+                bottomRightResize.applyStyles({
                     position: 'absolute',
-                    ... pxAll(boundingBoxes.bottomRightDrag),
+                    ... pxAll(boundingBoxes.bottomRightResize),
                     border: `${rgba(rgb, 1)} solid ${borderWidth}px`,
                     borderRadius: '100%',
                     background: 'white',
                     visibility: 'hidden',
                 });
         
-                container.replaceChildren(outline, topLeftDrag, bottomRightDrag);
+                container.replaceChildren(outline, topLeftResize, bottomRightResize);
         
                 return container;
             });
@@ -468,40 +576,38 @@ function getBestBox(
     control: ODControl,
     x: number,
     y: number,
-): [Box | undefined, BoxZone | undefined] {
+): [Box | undefined, Zone | undefined] {
     let bestDistance = Number.MAX_VALUE;
-    let bestBox:Box | undefined = undefined;
-    let bestBoxZone:BoxZone | undefined = undefined;
+    let bestBox: Box | undefined = undefined;
+    let bestZone: Zone | undefined = undefined;
 
     for (const box of control.boxes) {
-        const {padded} = getBoundingBoxes(control, box);
-        const boxZone = whichBoxZone(padded, x, y);
-        if (boxZone) {
-            let dx = Math.abs(padded.left + padded.width/2 - x);
-            let dy = Math.abs(padded.top + padded.height/2 - y);
+        const zone = whichZone(getZoneBoundingBoxes(control, box), x, y);
+        if (zone) {
+            const boxDimensions = getBoxDimensions(control, box.boundingBox);
+            let dx = Math.abs(boxDimensions.left + boxDimensions.width/2 - x);
+            let dy = Math.abs(boxDimensions.top + boxDimensions.height/2 - y);
             let distance = Math.sqrt(dx * dx + dy * dy);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 bestBox = box;
-                bestBoxZone = boxZone;
+                bestZone = zone;
             }
         }    
     }
 
-    return [bestBox, bestBoxZone];
+    return [bestBox, bestZone];
 }
 
-function whichBoxZone(
-    padded: BoundingBox,
+function whichZone(
+    zones: Record<Zone, BoundingBox>,
     x: number,
     y: number,
-): BoxZone | undefined {
-    if (x >= padded.left && x <= padded.left + padded.width && y >= padded.top && y <= padded.top + padded.height) {
-        if (x <= padded.left + dragTarget && y <= padded.top + dragTarget)
-            return 'topLeftDrag';
-        if (x >= padded.left + padded.width - dragTarget && y >= padded.top + padded.height - dragTarget)
-            return 'bottomRightDrag';
-        return 'padded';
+): Zone | undefined {
+    for (const [zone, boundingBox] of Object.entries(zones)) {
+        if (x >= boundingBox.left && x < boundingBox.left + boundingBox.width && y >= boundingBox.top && y <= boundingBox.top + boundingBox.height) {
+            return zone as Zone;
+        }
     }
     return undefined;
 }
