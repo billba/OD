@@ -41,6 +41,7 @@ interface ODControl {
     selectedBox?: Box,
     selectionLocked: boolean,
     selectedZone?: Zone,
+    newBox?: Box,
     drag: boolean,
     dragX: number,
     dragY: number,
@@ -54,10 +55,11 @@ let __ODState: ODState = {
     controls: {},
 }
 
-const dragRadius = 6;
+const dragRadius = 4;
 const dragTarget = dragRadius * 2;
-const outlineRadius = 8;
-const borderWidth = 3;
+const outlineRadius = 5;
+const borderWidth = 2;
+const minimumWidthHeight = 8;
 
 function insertBoxes(
     id: string,
@@ -382,6 +384,15 @@ const cursors = {
     bottomLeftResize: 'nesw-resize',
 }
 
+function getControlElements(control: ODControl) {
+    return {
+        boxes: `${control.div.id}-boxes`,
+        mouseInput: `${control.div.id}-mousemove`,
+    }
+}
+
+let i = 10;
+
 function ControlReducer(
     control: ODControl,
     action: ODControlAction,
@@ -406,12 +417,17 @@ function ControlReducer(
                     for (const [dimension, delta] of Object.entries(getZoneDimensions(control.selectedZone!).container!)) {
                         control.selectedBox.boundingBox[dimension as BoxDimension] += delta * (dimension == 'top' || dimension == 'height' ? dy : dx);
                     }
-                } else {
-                // finish adding a box
+
+                    if (control.newBox) {
+                        selectBox(control, control.newBox);
+                        control.selectionLocked = true;
+                        control.newBox = undefined;
+                    }
                 }
             }
             control.drag = false;
-            control.dragX = control.dragY = 0;
+            control.dragX = 0;
+            control.dragY = 0;
             break;
         }
 
@@ -419,17 +435,45 @@ function ControlReducer(
             if (control.drag) {
                 const dx = action.x - control.dragX;
                 const dy = action.y - control.dragY;
+                const absDx = Math.abs(dx);
+                const absDy = Math.abs(dy);
+
+                if (!control.selectedBox && !control.newBox) {
+                    if (absDx < minimumWidthHeight || absDy < minimumWidthHeight)
+                        return;
+                    control.selectedBox = control.newBox = {
+                        tagId: (i++).toString(),
+                        tagName: control.names[i % control.names.length],
+                        boundingBox: {
+                            top: control.dragY / control.height,
+                            left: control.dragX / control.width,
+                            height: 0,
+                            width: 0,
+                        }
+                    }
+                    control.boxes.push(control.newBox);
+                    document.getElementById(getControlElements(control).boxes)?.appendChild(createBoxElements(control, control.newBox));
+                }
+
+                if (control.newBox) {
+                    control.selectedZone = dx < 0 ?
+                        dy < 0 ? 
+                            'topLeftResize' :
+                            'bottomLeftResize' :
+                        dy < 0 ?
+                            'topRightResize' :
+                            'bottomRightResize';
+                
+                    console.log(control.selectedZone);
+                }
 
                 const boxElements = getBoxElements(getBoxElementIds(control, control.selectedBox!));
                 const boundingBoxes = getElementBoundingBoxes(control, control.selectedBox!);
 
                 for (const [element, deltas] of Object.entries(getZoneDimensions(control.selectedZone!))) {
-                    const styles: Partial<Record<keyof CSSStyleDeclaration, string>> = {};
                     for (const [dimension, delta] of Object.entries(deltas)) {
-                        styles[dimension as keyof CSSStyleDeclaration] = px(boundingBoxes[element as BoxElement][dimension as BoxDimension] + delta * (dimension == 'top' || dimension == 'height' ? dy : dx));
+                        (boxElements[element as BoxElement].style as any)[dimension as keyof CSSStyleDeclaration] = px(boundingBoxes[element as BoxElement][dimension as BoxDimension] + delta * (dimension == 'top' || dimension == 'height' ? dy : dx));
                     }
-        
-                    boxElements[element as BoxElement].applyStyles(styles);
                 }
 
                 return;
@@ -445,30 +489,7 @@ function ControlReducer(
                 const [bestBox, bestZone] = getBestBox(control, action.x, action.y);
 
                 if (bestBox !== control.selectedBox) {
-                    // change the selection (possibly to nothing)
-
-                    for (const box of control.boxes) {
-                        const boxIds = getBoxElementIds(control, box);
-                        const boxElements = getBoxElements(boxIds);
-                        const rgb = boxColor(control, box);
-
-                        if (box === bestBox) {
-                            // select the new selection
-                            boxElements.topLeftResize.style.visibility = 'visible';
-                            boxElements.bottomRightResize.style.visibility = 'visible';
-                            boxElements.outline.style.borderColor = rgba(rgb, 1);
-                        } else {
-                            if (box === control.selectedBox) {
-                                // unselect the current selection
-                                boxElements.topLeftResize.style.visibility = 'hidden';
-                                boxElements.bottomRightResize.style.visibility = 'hidden';
-                            }
-
-                            // dim or undim all the non-selected boxes
-                            boxElements.outline.style.borderColor = rgba(rgb, bestBox ? .1 : 1);
-                        }
-                    }
-                    control.selectedBox = bestBox;
+                    selectBox(control, bestBox);
                 }
 
                 control.selectedZone = bestZone;
@@ -485,8 +506,21 @@ function ControlReducer(
         }
 
         case 'Init': {
+            const {boxes: boxesId, mouseInput: mouseInputId} = getControlElements(control);
+
+            const boxes = document.createElement('div');
+            boxes.id = boxesId;
+            boxes.applyStyles({
+                position: `absolute`,
+                top: `0px`,
+                left: `0px`,
+                height: `${control.height}px`,
+                width: `${control.width}px`,
+            });
+            boxes.replaceChildren(... control.boxes.map(box => createBoxElements(control, box)))
+
             const mouseInput = document.createElement('div');
-            mouseInput.id = `${control.div.id}-mousemove`;
+            mouseInput.id = mouseInputId;
             mouseInput.applyStyles({
                 position: `absolute`,
                 top: `0px`,
@@ -515,61 +549,89 @@ function ControlReducer(
                     y: ev.offsetY,
                 })
             }
-
-            const divs = control.boxes.map(box => {
-                const boxIds = getBoxElementIds(control, box);
-                const boundingBoxes = getElementBoundingBoxes(control, box);
-                const rgb = boxColor(control, box);
-
-                let container = document.createElement('div');
-                container.id = boxIds.container;
-                container.applyStyles({
-                    position: 'absolute',
-                    ... pxAll(boundingBoxes.container),
-                    // outline: 'blue dashed 1px',
-                });
-
-                let outline = document.createElement('div');
-                outline.id = boxIds.outline;
-                outline.applyStyles({
-                    position: 'absolute',
-                    ... pxAll(boundingBoxes.outline),
-                    border: `${rgba(rgb, 1)} solid ${borderWidth}px`,
-                    borderRadius: `${outlineRadius}px`,
-                });
-
-                let topLeftResize = document.createElement('div');
-                topLeftResize.id = boxIds.topLeftResize;
-                topLeftResize.applyStyles({
-                    position: 'absolute',
-                    ... pxAll(boundingBoxes.topLeftResize),
-                    border: `${rgba(rgb, 1)} solid ${borderWidth}px`,
-                    borderRadius: `100%`,
-                    background: 'white',
-                    visibility: 'hidden',
-                });
         
-                let bottomRightResize = document.createElement('div');
-                bottomRightResize.id = boxIds.bottomRightResize;
-                bottomRightResize.applyStyles({
-                    position: 'absolute',
-                    ... pxAll(boundingBoxes.bottomRightResize),
-                    border: `${rgba(rgb, 1)} solid ${borderWidth}px`,
-                    borderRadius: '100%',
-                    background: 'white',
-                    visibility: 'hidden',
-                });
-        
-                container.replaceChildren(outline, topLeftResize, bottomRightResize);
-        
-                return container;
-            });
-        
-            control.div.replaceChildren(...divs, mouseInput);
+            control.div.replaceChildren(boxes, mouseInput);
             control.div.style.cursor = 'crosshair';
             break;
         }
     }
+}
+
+function createBoxElements(control: ODControl, box: Box) {
+    const boxIds = getBoxElementIds(control, box);
+    const boundingBoxes = getElementBoundingBoxes(control, box);
+    const rgb = boxColor(control, box);
+
+    let container = document.createElement('div');
+    container.id = boxIds.container;
+    container.applyStyles({
+        position: 'absolute',
+        ... pxAll(boundingBoxes.container),
+        // outline: 'blue dashed 1px',
+    });
+
+    let outline = document.createElement('div');
+    outline.id = boxIds.outline;
+    outline.applyStyles({
+        position: 'absolute',
+        ... pxAll(boundingBoxes.outline),
+        border: `${rgba(rgb, 1)} solid ${borderWidth}px`,
+        borderRadius: `${outlineRadius}px`,
+    });
+
+    let topLeftResize = document.createElement('div');
+    topLeftResize.id = boxIds.topLeftResize;
+    topLeftResize.applyStyles({
+        position: 'absolute',
+        ... pxAll(boundingBoxes.topLeftResize),
+        border: `${rgba(rgb, 1)} solid ${borderWidth}px`,
+        borderRadius: `100%`,
+        background: 'white',
+        visibility: 'hidden',
+    });
+
+    let bottomRightResize = document.createElement('div');
+    bottomRightResize.id = boxIds.bottomRightResize;
+    bottomRightResize.applyStyles({
+        position: 'absolute',
+        ... pxAll(boundingBoxes.bottomRightResize),
+        border: `${rgba(rgb, 1)} solid ${borderWidth}px`,
+        borderRadius: '100%',
+        background: 'white',
+        visibility: 'hidden',
+    });
+
+    container.replaceChildren(outline, topLeftResize, bottomRightResize);
+
+    return container;
+}
+
+function selectBox(
+    control: ODControl,
+    box?: Box
+) {
+    for (const _box of control.boxes) {
+        const boxIds = getBoxElementIds(control, _box);
+        const boxElements = getBoxElements(boxIds);
+        const rgb = boxColor(control, _box);
+
+        if (_box === box) {
+            // select the new selection
+            boxElements.topLeftResize.style.visibility = 'visible';
+            boxElements.bottomRightResize.style.visibility = 'visible';
+            boxElements.outline.style.borderColor = rgba(rgb, 1);
+        } else {
+            if (_box === control.selectedBox) {
+                // unselect the current selection
+                boxElements.topLeftResize.style.visibility = 'hidden';
+                boxElements.bottomRightResize.style.visibility = 'hidden';
+            }
+
+            // dim or undim all the non-selected boxes
+            boxElements.outline.style.borderColor = rgba(rgb, box ? .30 : 1);
+        }
+    }
+    control.selectedBox = box;
 }
 
 function getBestBox(

@@ -8,25 +8,35 @@
 </head>
 <body>
 
-    <div style='position: relative; height: 250px; width: 250px; background: lightgrey' id='1'>
-    </div>
-
-    <div style='position: relative; height: 250px; width: 250px; background: lightslategrey' id='2'>
-    </div>
+        <img src="./ducks.jpeg" style='position:absolute; top: 10; left: 10; height: 250px;' draggable='false'>
+        <div id='1' style='position:absolute; top:10; left:10; height:248px; width:331px; border: red solid 1px' id="1"></div>
+        <br>
+        <br>
+        <br>
+        <br>
+        <br>
+        <br>
+        <br>
+        <br>
+        <br>
+        <br>
+        <br>
+        <br>
+        <br>
+        <br>
+        <p><a href="https://www.flickr.com/photos/wwarby/16831305005"></a>Male and Female Mallard Ducks at Colchester Zoo</a> by William Warby, <a href="https://creativecommons.org/licenses/by/2.0/">some rights reserved</a></p>
+        
+    <!--div style='position: relative; height: 250px; width: 250px; background: lightslategrey' id='2'>
+    </div-->
 
     <script src="./scripts/boxes.js"></script>
 
     <script>
         insertBoxes("1", [
-            {tagId: "d1", tagName: "duck", boundingBox: {top: .32, left: .15, height: .5, width: .4}},
-            {tagId: "c1", tagName: "cat", boundingBox: {top: .45, left: .5, height: .2, width: .1}},
-            {tagId: "c3", tagName: "dog", boundingBox: {top: .25, left: .7, height: .2, width: .2}},
+            // {tagId: "d1", tagName: "duck", boundingBox: {top: .32, left: .15, height: .5, width: .4}},
+            // {tagId: "c1", tagName: "cat", boundingBox: {top: .45, left: .5, height: .2, width: .1}},
+            // {tagId: "c3", tagName: "dog", boundingBox: {top: .25, left: .7, height: .2, width: .2}},
         ], ['duck', 'cat', 'dog', 'bird']);
-        insertBoxes("2", [
-            {tagId: "d2", tagName: "dog", boundingBox: {top: .12, left: .55, height: .3, width: .2}},
-            {tagId: "b1", tagName: "bird", boundingBox: {top: .8, left: .8, height: .1, width: .1}},
-            {tagId: "c3", tagName: "duck", boundingBox: {top: .25, left: .7, height: .2, width: .2}},
-        ]);
     </script>
 
 </body>
